@@ -30,9 +30,11 @@ interface Props {
   enableQualityCheck: boolean;
   onToggleQualityCheck: (value: boolean) => void;
   onAnalyze: () => void;
+  onForceRegenerate?: () => void;
   analyzeButtonLabel?: string;
   canCancelAnalyze?: boolean;
   onCancelAnalyze?: () => void;
+  hasExistingScript?: boolean;
 }
 
 const formatDuration = (totalSeconds: number): string => {
@@ -73,9 +75,11 @@ const ConfigPanel: React.FC<Props> = ({
   enableQualityCheck,
   onToggleQualityCheck,
   onAnalyze,
+  onForceRegenerate,
   analyzeButtonLabel,
   canCancelAnalyze,
-  onCancelAnalyze
+  onCancelAnalyze,
+  hasExistingScript
 }) => {
   const rawDurationValue = duration === 'custom' ? customDurationInput : duration;
   const parsedDurationSeconds = parseDurationToSeconds(rawDurationValue);
@@ -262,6 +266,16 @@ const ConfigPanel: React.FC<Props> = ({
             </>
           )}
         </button>
+
+        {!isProcessing && hasExistingScript && onForceRegenerate && (
+          <button
+            type="button"
+            onClick={onForceRegenerate}
+            className={`mt-2 w-full rounded-lg border px-3 py-2 text-xs font-semibold tracking-wide transition-colors ${STYLES.button.secondary}`}
+          >
+            🔄 强制重新生成（忽略缓存）
+          </button>
+        )}
 
         {isProcessing && canCancelAnalyze && onCancelAnalyze && (
           <button

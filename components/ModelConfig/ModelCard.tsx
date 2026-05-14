@@ -14,7 +14,7 @@ import {
   AspectRatio,
   VideoDuration
 } from '../../types/model';
-import { getProviderById } from '../../services/modelRegistry';
+import { getProviderById, getProviders } from '../../services/modelRegistry';
 
 interface ModelCardProps {
   model: ModelDefinition;
@@ -37,7 +37,13 @@ const ModelCard: React.FC<ModelCardProps> = ({
 }) => {
   const [editParams, setEditParams] = useState<any>(model.params);
   const [editApiKey, setEditApiKey] = useState<string>(model.apiKey || '');
+  const [editName, setEditName] = useState<string>(model.name);
+  const [editApiModel, setEditApiModel] = useState<string>(model.apiModel || '');
+  const [editEndpoint, setEditEndpoint] = useState<string>(model.endpoint || '');
+  const [editDescription, setEditDescription] = useState<string>(model.description || '');
+  const [editProviderId, setEditProviderId] = useState<string>(model.providerId);
   const provider = getProviderById(model.providerId);
+  const allProviders = getProviders();
   const isVolcengineModel = model.providerId === 'volcengine';
   const modelHasApiKey = Boolean(model.apiKey?.trim());
   const providerHasApiKey = Boolean(provider?.apiKey?.trim());
@@ -56,6 +62,33 @@ const ModelCard: React.FC<ModelCardProps> = ({
   const handleApiKeyChange = (value: string) => {
     setEditApiKey(value);
     onUpdate({ apiKey: value.trim() || undefined });
+  };
+
+  const handleNameChange = (value: string) => {
+    setEditName(value);
+    const trimmed = value.trim();
+    if (trimmed) onUpdate({ name: trimmed } as any);
+  };
+
+  const handleApiModelChange = (value: string) => {
+    setEditApiModel(value);
+    const trimmed = value.trim();
+    if (trimmed) onUpdate({ apiModel: trimmed } as any);
+  };
+
+  const handleEndpointChange = (value: string) => {
+    setEditEndpoint(value);
+    onUpdate({ endpoint: value.trim() || undefined } as any);
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    setEditDescription(value);
+    onUpdate({ description: value.trim() || undefined } as any);
+  };
+
+  const handleProviderChange = (value: string) => {
+    setEditProviderId(value);
+    onUpdate({ providerId: value } as any);
   };
 
   const renderChatParams = (params: ChatModelParams) => (
@@ -294,6 +327,72 @@ const ModelCard: React.FC<ModelCardProps> = ({
       {isExpanded && (
         <div className="px-4 pb-4 pt-0 border-t border-[var(--border-primary)]">
           <div className="pt-4 space-y-4">
+            {/* 自定义模型基础信息编辑 */}
+            {!model.isBuiltIn && (
+              <div className="space-y-3 pb-3 border-b border-[var(--border-primary)]">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">模型名称</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      placeholder="如：GPT-4 Turbo"
+                      className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 模型名</label>
+                    <input
+                      type="text"
+                      value={editApiModel}
+                      onChange={(e) => handleApiModelChange(e.target.value)}
+                      placeholder="如：gpt-4-turbo"
+                      className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">描述</label>
+                  <input
+                    type="text"
+                    value={editDescription}
+                    onChange={(e) => handleDescriptionChange(e.target.value)}
+                    placeholder="可选的描述信息"
+                    className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 端点 (Endpoint)</label>
+                  <input
+                    type="text"
+                    value={editEndpoint}
+                    onChange={(e) => handleEndpointChange(e.target.value)}
+                    placeholder="留空使用默认端点"
+                    className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 提供商</label>
+                  <select
+                    value={editProviderId}
+                    onChange={(e) => handleProviderChange(e.target.value)}
+                    className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+                  >
+                    {allProviders.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.baseUrl})</option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-[var(--text-muted)] mt-1">
+                    切换提供商会改变此模型实际请求的 baseUrl
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 模型专属 API Key */}
             <div>
               <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">

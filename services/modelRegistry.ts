@@ -660,15 +660,46 @@ export const getApiKeyForModel = (modelId: string): string | undefined => {
 };
 
 /**
- * 获取模型对应的 API 基础 URL
+ * 把任意字符串编码为 base64url（无 padding）。
+ * 用于把 provider.baseUrl 安全塞进 URL path 段。
+ */
+const toBase64Url = (input: string): string => {
+  const bytes = new TextEncoder().encode(input);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+/**
+ * 获取模型对应的 API 基础 URL。
+ *
+ * 普通情况：返回 provider.baseUrl
+ * provider.useProxy=true：返回 "/api/inference-proxy/<base64url(baseUrl)>"
+ *   —— 适配器照常 fetch(`${apiBase}${endpoint}`)，请求会被反向代理转发到真实地址，
+ *   解决厂商不返回 CORS 响应头导致浏览器无法直连的问题。
  */
 export const getApiBaseUrlForModel = (modelId: string): string => {
   const model = getModelById(modelId);
-  if (!model) return BUILTIN_PROVIDERS[0].baseUrl.replace(/\/+$/, '');
-  
+  const fallbackBase = BUILTIN_PROVIDERS[0].baseUrl.replace(/\/+$/, '');
+  if (!model) return fallbackBase;
+
   const provider = getProviderById(model.providerId);
-  const baseUrl = provider?.baseUrl || BUILTIN_PROVIDERS[0].baseUrl;
-  return baseUrl.replace(/\/+$/, '');
+  const rawBaseUrl = provider?.baseUrl || BUILTIN_PROVIDERS[0].baseUrl;
+  const sanitizedBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+
+  if (provider?.useProxy) {
+    try {
+      const encoded = toBase64Url(sanitizedBaseUrl);
+      return `/api/inference-proxy/${encoded}`;
+    } catch {
+      // 编码失败的极端情况下直连，至少不阻塞调用
+      return sanitizedBaseUrl;
+    }
+  }
+
+  return sanitizedBaseUrl;
 };
 
 // ============================================

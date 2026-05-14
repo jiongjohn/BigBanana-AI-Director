@@ -382,15 +382,21 @@ const parseNestedJsonString = (value: unknown): unknown => {
 
 export const parseJsonWithRecovery = <T = any>(raw: string, defaultValue?: T): T => {
   const candidates = buildJsonParseCandidates(raw);
+  
+  console.log('🔧 [parseJsonWithRecovery] 候选数量:', candidates.length);
+  console.log('🔧 [parseJsonWithRecovery] 第一个候选（前500字符）:', candidates[0]?.substring(0, 500));
 
   for (const candidate of candidates) {
     try {
-      return parseNestedJsonString(JSON.parse(candidate)) as T;
-    } catch {
-      // Continue trying more tolerant candidates.
+      const parsed = parseNestedJsonString(JSON.parse(candidate)) as T;
+      console.log('✅ [parseJsonWithRecovery] 成功解析，keys:', Object.keys(parsed || {}));
+      return parsed;
+    } catch (err) {
+      console.warn('⚠️ [parseJsonWithRecovery] 候选解析失败:', err instanceof Error ? err.message : String(err));
     }
   }
 
+  console.error('❌ [parseJsonWithRecovery] 所有候选都失败，返回默认值');
   if (defaultValue !== undefined) {
     return defaultValue;
   }

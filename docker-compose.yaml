@@ -9,6 +9,7 @@ services:
     depends_on:
       - media-proxy
       - new-api-proxy
+      - inference-proxy
     restart: unless-stopped
 
   media-proxy:
@@ -38,4 +39,19 @@ services:
       NEW_API_ALLOW_PRIVATE_HOSTS: "false"
     expose:
       - "8788"
+    restart: unless-stopped
+
+  inference-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference-proxy
+    container_name: bigbanana-inference-proxy
+    environment:
+      INFERENCE_PROXY_PORT: "8789"
+      # 留空表示允许任意外网域名（仅过滤内网/私有 IP）。
+      # 生产部署建议填白名单，如：dashscope.aliyuncs.com,api.openai.com,volces.com
+      INFERENCE_PROXY_ALLOWED_HOSTS: ""
+      INFERENCE_PROXY_ALLOW_PRIVATE_HOSTS: "false"
+    expose:
+      - "8789"
     restart: unless-stopped

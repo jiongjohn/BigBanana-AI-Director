@@ -162,6 +162,7 @@ export interface ModelProvider {
   apiKey?: string;               // 独立 API Key（可选）
   isBuiltIn: boolean;            // 是否内置
   isDefault: boolean;            // 是否为默认提供商
+  useProxy?: boolean;            // 是否通过本地反向代理调用（解决厂商无 CORS 头问题）
 }
 
 // ============================================

@@ -64,7 +64,49 @@ const SceneBreakdown: React.FC<Props> = ({
   onDeleteShot,
   onBackToStory
 }) => {
+  console.log('📊 [SceneBreakdown] 渲染数据:', {
+    hasScriptData: !!project.scriptData,
+    characters: project.scriptData?.characters?.length || 0,
+    scenes: project.scriptData?.scenes?.length || 0,
+    shots: project.shots?.length || 0,
+    title: project.scriptData?.title
+  });
+
   const uniqueScenes = deduplicateScenes(project.scriptData?.scenes);
+
+  if (!project.scriptData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-[var(--bg-base)] text-[var(--text-muted)]">
+        <List className="w-16 h-16 mb-4 opacity-20" />
+        <p className="text-lg">暂无分镜数据</p>
+        <p className="text-sm mt-2">请先在左侧生成分镜脚本</p>
+        <button 
+          onClick={onBackToStory}
+          className="mt-6 text-xs font-bold text-[var(--accent-text)] hover:text-[var(--accent-text-hover)] flex items-center gap-2 px-4 py-2 hover:bg-[var(--bg-hover)] rounded-lg transition-all border border-[var(--border-primary)]"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          返回编辑
+        </button>
+      </div>
+    );
+  }
+
+  if (!project.shots || project.shots.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-[var(--bg-base)] text-[var(--text-muted)]">
+        <Clock className="w-16 h-16 mb-4 opacity-20" />
+        <p className="text-lg">暂无分镜列表</p>
+        <p className="text-sm mt-2">分镜数据生成中或生成失败</p>
+        <button 
+          onClick={onBackToStory}
+          className="mt-6 text-xs font-bold text-[var(--accent-text)] hover:text-[var(--accent-text-hover)] flex items-center gap-2 px-4 py-2 hover:bg-[var(--bg-hover)] rounded-lg transition-all border border-[var(--border-primary)]"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          返回编辑
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-base)] animate-in fade-in duration-500">

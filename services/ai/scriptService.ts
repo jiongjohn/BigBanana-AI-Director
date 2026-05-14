@@ -523,44 +523,100 @@ export const parseScriptStructure = async (
     
     Tasks:
     1. Extract title, genre, logline (in ${language}).
-    2. Extract characters (id, name, gender, age, personality).
-    3. Extract scenes (id, location, time, atmosphere).
-    4. Extract recurring props/items that appear in multiple scenes (id, name, category, description).
-    5. Break down the story into paragraphs linked to scenes.
+    2. Extract characters (id, name, gender, age, personality - keep personality reasonably concise, max 150 chars).
+    3. Extract scenes (id, location, time, atmosphere - keep atmosphere concise, max 80 chars).
+    4. Extract recurring props/items that appear in multiple scenes (id, name, category, description - keep description concise, max 100 chars).
+    5. Break down the story into paragraphs linked to scenes - for each paragraph, provide a summary (max 200 chars), NOT the full text.
     
     Input:
-    "${rawText.slice(0, 30000)}" // Limit input context if needed
+    "${rawText.slice(0, 30000)}"
     
-    Output ONLY valid JSON with this structure:
+    CRITICAL: You MUST return a COMPLETE, VALID JSON object. Ensure:
+    - All arrays are properly closed with ]
+    - All objects are properly closed with }
+    - No trailing commas
+    - The entire response is a single valid JSON object
+    - Keep text fields reasonably concise to avoid truncation
+    - For storyParagraphs, use summaries (max 200 chars each), NOT full paragraph text
+    
+    Output ONLY valid JSON with this structure (no markdown, no explanations):
     {
       "title": "string",
       "genre": "string",
-      "logline": "string",
-      "characters": [{"id": "string", "name": "string", "gender": "string", "age": "string", "personality": "string"}],
-      "scenes": [{"id": "string", "location": "string", "time": "string", "atmosphere": "string"}],
-      "props": [{"id":"string","name":"string","category":"string","description":"string"}],
-      "storyParagraphs": [{"id": number, "text": "string", "sceneRefId": "string"}]
+      "logline": "string (max 600 chars)",
+      "characters": [{"id": "string", "name": "string", "gender": "string", "age": "string", "personality": "string (max 150 chars)"}],
+      "scenes": [{"id": "string", "location": "string", "time": "string", "atmosphere": "string (max 80 chars)"}],
+      "props": [{"id":"string","name":"string","category":"string","description":"string (max 100 chars)"}],
+      "storyParagraphs": [{"id": number, "text": "string (summary, max 200 chars)", "sceneRefId": "string"}]
     }
   `;
 
   ensureNotAborted();
   const responseText = await retryOperation(
-    () => chatCompletion(prompt, model, 0.7, 8192, 'json_object', 600000, abortSignal),
+    () => chatCompletion(prompt, model, 0.7, 16384, 'json_object', 600000, abortSignal),
     3,
     2000,
     abortSignal
   );
   ensureNotAborted();
 
+  console.log('📥 [parseScriptStructure] AI 原始响应（前1000字符）:', responseText.substring(0, 1000));
+  console.log('📥 [parseScriptStructure] AI 原始响应长度:', responseText.length);
+
   let parsed: any = {};
   try {
-    parsed = parseJsonWithRecovery(responseText, {});
+    let jsonText = responseText.trim();
+    
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+    }
+    
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[0];
+    }
+    
+    jsonText = jsonText
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/([}\]]),\s*$/g, '$1');
+    
+    if (!jsonText.endsWith('}')) {
+      const lastValidBrace = jsonText.lastIndexOf('}');
+      if (lastValidBrace > 0) {
+        jsonText = jsonText.substring(0, lastValidBrace + 1);
+      }
+    }
+    
+    parsed = JSON.parse(jsonText);
+    console.log('✅ [parseScriptStructure] JSON 解析成功');
+    console.log('🔍 [parseScriptStructure] 解析后的数据:', {
+      title: parsed.title,
+      charactersCount: parsed.characters?.length || 0,
+      scenesCount: parsed.scenes?.length || 0,
+      propsCount: parsed.props?.length || 0,
+      paragraphsCount: parsed.storyParagraphs?.length || 0
+    });
   } catch (e) {
-    console.error("Failed to parse script structure JSON:", e);
-    parsed = {};
+    console.error("❌ JSON 解析失败，尝试使用 parseJsonWithRecovery");
+    try {
+      parsed = parseJsonWithRecovery(responseText, {});
+      console.log('✅ parseJsonWithRecovery 成功');
+    } catch (recoveryError) {
+      console.error("❌ parseJsonWithRecovery 也失败:", recoveryError);
+      parsed = {};
+    }
   }
 
   const structured = normalizeStructure(parsed);
+  console.log('🔍 [parseScriptStructure] 标准化后的结构:', {
+    title: structured.title,
+    characters: structured.characters.length,
+    scenes: structured.scenes.length,
+    props: structured.props.length,
+    paragraphs: structured.storyParagraphs.length
+  });
 
   if (structured.storyParagraphs.length === 0 && structured.scenes.length > 0) {
     const fallbackParagraphs = rawText

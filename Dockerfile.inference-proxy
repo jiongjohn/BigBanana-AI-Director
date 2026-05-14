@@ -1,0 +1,12 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY server/inferenceProxyCore.mjs ./server/inferenceProxyCore.mjs
+COPY server/inferenceProxyServer.mjs ./server/inferenceProxyServer.mjs
+
+ENV INFERENCE_PROXY_PORT=8789
+
+EXPOSE 8789
+
+CMD ["node", "server/inferenceProxyServer.mjs"]

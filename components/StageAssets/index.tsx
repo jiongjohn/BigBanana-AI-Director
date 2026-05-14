@@ -459,16 +459,19 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
       updateProject(prev => {
         if (!prev.scriptData) return prev;
         const newData = cloneScriptData(prev.scriptData);
+        const urlWithTimestamp = imageUrl.includes('?') 
+          ? `${imageUrl}&t=${Date.now()}` 
+          : `${imageUrl}?t=${Date.now()}`;
         if (type === 'character') {
           const c = newData.characters.find(c => compareIds(c.id, id));
           if (c) {
-            c.referenceImage = imageUrl;
+            c.referenceImage = urlWithTimestamp;
             c.status = 'completed';
           }
         } else {
           const s = newData.scenes.find(s => compareIds(s.id, id));
           if (s) {
-            s.referenceImage = imageUrl;
+            s.referenceImage = urlWithTimestamp;
             s.status = 'completed';
           }
         }
@@ -1449,7 +1452,11 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
         const newData = cloneScriptData(prev.scriptData);
         const c = newData.characters.find(c => compareIds(c.id, charId));
         if (c && c.turnaround) {
-          c.turnaround.imageUrl = imageUrl;
+          // 添加时间戳参数强制浏览器重新加载图片
+          const urlWithTimestamp = imageUrl.includes('?') 
+            ? `${imageUrl}&t=${Date.now()}` 
+            : `${imageUrl}?t=${Date.now()}`;
+          c.turnaround.imageUrl = urlWithTimestamp;
           c.turnaround.status = 'completed';
         }
         return { ...prev, scriptData: newData };

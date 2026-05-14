@@ -489,7 +489,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (forceRegenerate: boolean = false) => {
     const finalDuration = getFinalValue(localDuration, customDurationInput);
     const finalModel = getFinalValue(localModel, customModelInput);
     const finalVisualStyle = getFinalValue(localVisualStyle, customStyleInput);
@@ -509,8 +509,8 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
       return;
     }
 
-    const previousScriptData = project.scriptData || null;
-    const previousShots = Array.isArray(project.shots) ? project.shots : [];
+    const previousScriptData = forceRegenerate ? null : (project.scriptData || null);
+    const previousShots = forceRegenerate ? [] : (Array.isArray(project.shots) ? project.shots : []);
 
     const structureKey = buildStepKey('structure', {
       script: localScript,
@@ -537,7 +537,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
       visualStyle: finalVisualStyle,
       enableQualityCheck
     });
-    const savedCheckpoint = project.scriptGenerationCheckpoint;
+    const savedCheckpoint = forceRegenerate ? null : project.scriptGenerationCheckpoint;
     const resumeCheckpoint =
       savedCheckpoint && savedCheckpoint.configKey === analyzeConfigKey
         ? savedCheckpoint
@@ -546,11 +546,14 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     let nextStep: AnalyzeRunStep = 'structure';
     let workingScriptData: ScriptData | null = resumeCheckpoint?.scriptData || previousScriptData || null;
     let shouldGenerateOnlyMissingVisuals = false;
-    let reuseUnchangedScenes = !!previousScriptData && previousShots.length > 0;
+    let reuseUnchangedScenes = !forceRegenerate && !!previousScriptData && previousShots.length > 0;
 
     if (resumeCheckpoint?.scriptData) {
       nextStep = resumeCheckpoint.step;
       shouldGenerateOnlyMissingVisuals = resumeCheckpoint.step === 'visuals';
+    } else if (forceRegenerate) {
+      nextStep = 'structure';
+      shouldGenerateOnlyMissingVisuals = false;
     } else {
       const meta = previousScriptData?.generationMeta;
       if (!previousScriptData || !meta?.structureKey) {
@@ -573,7 +576,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
       shouldGenerateOnlyMissingVisuals = nextStep === 'structure' && visualsInputStable;
     }
 
-    if (nextStep === 'done') {
+    if (nextStep === 'done' && !forceRegenerate) {
       setError(null);
       setProcessingLogs([]);
       logScriptProgress('配置未变化，已复用现有分镜结果。');
@@ -607,6 +610,16 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     setError(null);
 
     try {
+      console.log('🚀 [handleAnalyze] 开始生成流程');
+      console.log('📋 [handleAnalyze] 配置:', {
+        nextStep,
+        script: localScript.substring(0, 100) + '...',
+        language: localLanguage,
+        model: finalModel,
+        visualStyle: finalVisualStyle,
+        duration: finalDuration
+      });
+      
       updateProject({
         title: localTitle,
         rawScript: localScript,
@@ -621,12 +634,20 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
       if (nextStep === 'structure' || !workingScriptData) {
         setProcessingMessage('正在解析剧本结构...');
         logScriptProgress('开始解析剧本结构...');
+        console.log('📝 [handleAnalyze] 调用 parseScriptStructure...');
         const structured = await parseScriptStructure(
           localScript,
           localLanguage,
           finalModel,
           controller.signal
         );
+        console.log('✅ [handleAnalyze] parseScriptStructure 完成:', {
+          title: structured.title,
+          characters: structured.characters.length,
+          scenes: structured.scenes.length,
+          props: structured.props.length,
+          paragraphs: structured.storyParagraphs.length
+        });
         const hydrated = hydrateScriptDataMeta(structured, {
           targetDuration: finalDuration,
           language: localLanguage,
@@ -654,6 +675,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         const visualPassMode = shouldGenerateOnlyMissingVisuals ? '增量补全' : '全量重建';
         setProcessingMessage(`正在生成角色/场景/道具视觉提示词（${visualPassMode}）...`);
         logScriptProgress(`开始生成视觉提示词（${visualPassMode}）...`);
+        console.log('🎨 [handleAnalyze] 调用 enrichScriptDataVisuals...');
         if (!shouldGenerateOnlyMissingVisuals) {
           reuseUnchangedScenes = false;
         }
@@ -667,6 +689,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
             onlyMissing: shouldGenerateOnlyMissingVisuals
           }
         );
+        console.log('✅ [handleAnalyze] enrichScriptDataVisuals 完成');
         const hydrated = hydrateScriptDataMeta(enriched, {
           targetDuration: finalDuration,
           language: localLanguage,
@@ -692,6 +715,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
           : '开始生成分镜...'
       );
       logScriptProgress(enableQualityCheck ? '已启用分镜质量校验与自动修复。' : '分镜质量校验已关闭。');
+      console.log('🎬 [handleAnalyze] 调用 generateShotList...');
       const shots = await generateShotList(workingScriptData!, finalModel, {
         abortSignal: controller.signal,
         previousScriptData,
@@ -737,7 +761,16 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         }
       }
 
+      console.log('✅ [handleAnalyze] generateShotList 完成, shots:', shots.length);
+      
       const rebuiltRefs = rebuildAssetRefsFromScriptData(workingScriptData!);
+      console.log('💾 [handleAnalyze] 更新项目状态:', {
+        title: workingScriptData!.title,
+        characters: workingScriptData!.characters.length,
+        scenes: workingScriptData!.scenes.length,
+        shots: shots.length
+      });
+      
       updateProject({
         scriptData: workingScriptData!,
         shots,
@@ -749,14 +782,18 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
         scriptGenerationCheckpoint: null
       });
 
+      console.log('🎉 [handleAnalyze] 生成完成，切换到 script 标签页');
       setActiveTab('script');
     } catch (err: any) {
-      console.error(err);
+      console.error('❌ [handleAnalyze] 生成失败:', err);
+      console.error('❌ [handleAnalyze] 错误堆栈:', err.stack);
       if (isAbortError(err, controller.signal)) {
-        setError('已取消生成，可点击“继续生成分镜脚本”从断点继续。');
+        setError('已取消生成，可点击"继续生成分镜脚本"从断点继续。');
         logScriptProgress('生成已取消，可点击继续按钮从断点续跑。');
       } else {
-        setError(`错误: ${err.message || 'AI 连接失败'}`);
+        const errorMsg = `错误: ${err.message || 'AI 连接失败'}`;
+        console.error('❌ [handleAnalyze] 设置错误信息:', errorMsg);
+        setError(errorMsg);
       }
       updateProject({ isParsingScript: false });
     } finally {
@@ -773,6 +810,12 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
     analyzeAbortControllerRef.current?.abort();
     setProcessingMessage('正在取消生成...');
     logScriptProgress('正在取消当前生成流程...');
+  };
+
+  const handleForceRegenerate = () => {
+    console.log('🔄 [handleForceRegenerate] 强制重新生成');
+    showAlert('开始强制重新生成...', { type: 'info' });
+    handleAnalyze(true);
   };
 
   const handleAssetMatchConfirm = (finalMatches: AssetMatchResult) => {
@@ -1457,9 +1500,11 @@ const StageScript: React.FC<Props> = ({ project, updateProject, onShowModelConfi
             enableQualityCheck={enableQualityCheck}
             onToggleQualityCheck={setEnableQualityCheck}
             onAnalyze={handleAnalyze}
+            onForceRegenerate={handleForceRegenerate}
             analyzeButtonLabel={analyzeButtonLabel}
             canCancelAnalyze={!!analyzeAbortControllerRef.current}
             onCancelAnalyze={handleCancelAnalyze}
+            hasExistingScript={!!project.scriptData}
           />
           <ScriptEditor
             script={localScript}
