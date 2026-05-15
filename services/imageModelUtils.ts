@@ -37,22 +37,9 @@ export const getDefaultImageEndpoint = (
 
 export const resolveOpenAiImageEndpoint = (
   endpoint: string | undefined,
-  hasReferenceImages: boolean
+  _hasReferenceImages: boolean
 ): string => {
-  const normalized = (endpoint || DEFAULT_OPENAI_IMAGE_ENDPOINT).trim() || DEFAULT_OPENAI_IMAGE_ENDPOINT;
-  if (!hasReferenceImages) {
-    return normalized;
-  }
-
-  if (normalized.includes('/images/edits')) {
-    return normalized;
-  }
-
-  if (normalized.includes('/images/generations')) {
-    return normalized.replace('/images/generations', '/images/edits');
-  }
-
-  return normalized;
+  return (endpoint || DEFAULT_OPENAI_IMAGE_ENDPOINT).trim() || DEFAULT_OPENAI_IMAGE_ENDPOINT;
 };
 
 export const mapAspectRatioToOpenAiImageSize = (aspectRatio: AspectRatio): string => {

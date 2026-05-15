@@ -811,6 +811,70 @@ const extractImageFromOpenAiResponse = (response: any): string | null => {
   return null;
 };
 
+const isAsyncTaskResponse = (response: any): boolean => {
+  if (response?.object === 'generation.task') return true;
+  const status = String(response?.status || '').toLowerCase();
+  return !!(response?.id && ['pending', 'queued', 'in_progress', 'processing', 'running'].includes(status));
+};
+
+const extractImageFromAsyncResult = (taskData: any): string | null => {
+  const resultFirst = taskData?.result?.data?.[0];
+  if (resultFirst?.b64_json) {
+    return `data:image/png;base64,${resultFirst.b64_json}`;
+  }
+  if (resultFirst?.url) return String(resultFirst.url);
+  if (taskData?.url) return String(taskData.url);
+  if (taskData?.result_url) return String(taskData.result_url);
+  const dataFirst = taskData?.data?.[0];
+  if (dataFirst?.b64_json) {
+    return `data:image/png;base64,${dataFirst.b64_json}`;
+  }
+  if (dataFirst?.url) return String(dataFirst.url);
+  return null;
+};
+
+const pollImageTask = async (
+  taskId: string,
+  apiBase: string,
+  apiKey: string,
+  maxPollingTime: number = 180000,
+  pollingInterval: number = 3000
+): Promise<any> => {
+  const startTime = Date.now();
+  const pollingEndpoint = `${apiBase}/v1/images/generations/${taskId}`;
+
+  while (Date.now() - startTime < maxPollingTime) {
+    await new Promise(resolve => setTimeout(resolve, pollingInterval));
+
+    const statusResponse = await fetch(pollingEndpoint, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!statusResponse.ok) {
+      console.warn('⚠️ 查询图片任务状态失败，继续重试...');
+      continue;
+    }
+
+    const statusData = await statusResponse.json();
+    const status = String(statusData.status || '').toLowerCase();
+
+    console.log('🔄 图片任务状态:', status, '进度:', statusData.progress ?? '-');
+
+    if (status === 'completed' || status === 'succeeded') {
+      return statusData;
+    } else if (status === 'failed' || status === 'error' || status === 'cancelled') {
+      const reason = statusData.error?.message || statusData.fail_reason || '未知错误';
+      throw new Error(`图片生成失败: ${reason}`);
+    }
+  }
+
+  throw new Error('图片生成超时（3分钟），请稍后重试。');
+};
+
 export const generateImage = async (
   prompt: string,
   referenceImages: string[] = [],
@@ -1039,8 +1103,6 @@ NEGATIVE PROMPT (strictly avoid): ${compactNegativePrompt}`;
           formData.append('size', openAiSize);
           formData.append('quality', OPENAI_IMAGE_QUALITY);
           formData.append('output_format', OPENAI_IMAGE_OUTPUT_FORMAT);
-          formData.append('output_compression', String(OPENAI_IMAGE_OUTPUT_COMPRESSION));
-          formData.append('n', '1');
           files.forEach(file => formData.append('image[]', file));
 
           res = await fetch(`${apiBase}${openAiEndpoint}`, {
@@ -1082,6 +1144,26 @@ NEGATIVE PROMPT (strictly avoid): ${compactNegativePrompt}`;
 
         return await res.json();
       });
+
+      if (isAsyncTaskResponse(response)) {
+        const taskId = response.id;
+        console.log('📋 图片生成任务已提交（异步模式），任务 ID:', taskId);
+        const completedTask = await pollImageTask(taskId, apiBase, apiKey);
+        const asyncImage = extractImageFromAsyncResult(completedTask);
+        if (asyncImage) {
+          addRenderLogWithTokens({
+            type: 'keyframe',
+            resourceId: 'image-' + Date.now(),
+            resourceName: prompt.substring(0, 50) + '...',
+            status: 'success',
+            model: imageModelId,
+            prompt: prompt,
+            duration: Date.now() - startTime
+          });
+          return asyncImage;
+        }
+        throw new Error('图片生成失败：异步任务完成但未返回有效图片数据。');
+      }
 
       const openAiImage = extractImageFromOpenAiResponse(response);
       if (openAiImage) {
