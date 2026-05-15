@@ -5,10 +5,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { 
-  ModelType, 
+import {
+  ModelType,
   ModelDefinition,
   ImageApiFormat,
+  AudioApiFormat,
   AudioOutputFormat,
   ChatModelParams,
   ImageModelParams,
@@ -21,6 +22,7 @@ import {
   DEFAULT_VIDEO_PARAMS_VEO,
   DEFAULT_VIDEO_PARAMS_DOUBAO_SEEDANCE,
   DEFAULT_AUDIO_PARAMS,
+  DEFAULT_AUDIO_PARAMS_DASHSCOPE,
 } from '../../types/model';
 import { getProviders, addProvider } from '../../services/modelRegistry';
 import { useAlert } from '../GlobalAlert';
@@ -42,8 +44,24 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
   const [apiKey, setApiKey] = useState('');
   const [imageApiFormat, setImageApiFormat] = useState<ImageApiFormat>('gemini');
   const [videoMode, setVideoMode] = useState<'sync' | 'async' | 'task'>('sync');
+  const [audioApiFormat, setAudioApiFormat] = useState<AudioApiFormat>('openai_chat');
   const [audioVoice, setAudioVoice] = useState<string>(DEFAULT_AUDIO_PARAMS.defaultVoice);
   const [audioOutputFormat, setAudioOutputFormat] = useState<AudioOutputFormat>(DEFAULT_AUDIO_PARAMS.outputFormat);
+
+  // 切换音频协议时，自动填充该协议常用的音色/格式/endpoint，方便填表
+  const handleAudioApiFormatChange = (next: AudioApiFormat) => {
+    setAudioApiFormat(next);
+    if (next === 'dashscope_tts') {
+      setAudioVoice(DEFAULT_AUDIO_PARAMS_DASHSCOPE.defaultVoice);
+      setAudioOutputFormat(DEFAULT_AUDIO_PARAMS_DASHSCOPE.outputFormat);
+      if (!endpoint.trim()) {
+        setEndpoint('/api/v1/services/aigc/multimodal-generation/generation');
+      }
+    } else {
+      setAudioVoice(DEFAULT_AUDIO_PARAMS.defaultVoice);
+      setAudioOutputFormat(DEFAULT_AUDIO_PARAMS.outputFormat);
+    }
+  };
   
   // 提供商配置
   const [providerMode, setProviderMode] = useState<'existing' | 'custom'>('existing');
@@ -122,13 +140,21 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
               : '/v1/videos';
       }
     } else {
+      const audioDefaults =
+        audioApiFormat === 'dashscope_tts'
+          ? DEFAULT_AUDIO_PARAMS_DASHSCOPE
+          : DEFAULT_AUDIO_PARAMS;
       params = {
-        ...DEFAULT_AUDIO_PARAMS,
-        defaultVoice: audioVoice.trim() || DEFAULT_AUDIO_PARAMS.defaultVoice,
+        ...audioDefaults,
+        defaultVoice: audioVoice.trim() || audioDefaults.defaultVoice,
         outputFormat: audioOutputFormat,
+        apiFormat: audioApiFormat,
       };
       if (!resolvedEndpoint) {
-        resolvedEndpoint = '/v1/chat/completions';
+        resolvedEndpoint =
+          audioApiFormat === 'dashscope_tts'
+            ? '/api/v1/services/aigc/multimodal-generation/generation'
+            : '/v1/chat/completions';
       }
     }
 
@@ -223,27 +249,72 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
 
       {/* 配音模型特有选项 */}
       {type === 'audio' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-3">
           <div>
-            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
-            <input
-              type="text"
-              value={audioVoice}
-              onChange={(e) => setAudioVoice(e.target.value)}
-              placeholder="如：alloy"
-              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
-            />
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 协议</label>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => handleAudioApiFormatChange('openai_chat')}
+                className={`flex-1 py-2 text-xs rounded transition-colors ${
+                  audioApiFormat === 'openai_chat'
+                    ? 'bg-[var(--accent)] text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:bg-[var(--border-secondary)]'
+                }`}
+              >
+                OpenAI 多模态 Chat（gpt-audio 系列）
+              </button>
+              <button
+                onClick={() => handleAudioApiFormatChange('openai_speech')}
+                className={`flex-1 py-2 text-xs rounded transition-colors ${
+                  audioApiFormat === 'openai_speech'
+                    ? 'bg-[var(--accent)] text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:bg-[var(--border-secondary)]'
+                }`}
+              >
+                OpenAI Speech（/v1/audio/speech）
+              </button>
+              <button
+                onClick={() => handleAudioApiFormatChange('dashscope_tts')}
+                className={`flex-1 py-2 text-xs rounded transition-colors ${
+                  audioApiFormat === 'dashscope_tts'
+                    ? 'bg-[var(--accent)] text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:bg-[var(--border-secondary)]'
+                }`}
+              >
+                阿里 DashScope TTS（qwen3-tts 系列）
+              </button>
+            </div>
+            {audioApiFormat === 'dashscope_tts' && (
+              <p className="text-[9px] text-[var(--text-muted)] mt-1 leading-relaxed">
+                提供商 baseUrl 推荐填 <span className="font-mono">https://dashscope.aliyuncs.com</span>，
+                端点 <span className="font-mono">/api/v1/services/aigc/multimodal-generation/generation</span>，
+                需要勾选 useProxy。音色用阿里官方名（Cherry / Ethan / Chelsie 等），不是 OpenAI 的 alloy。
+              </p>
+            )}
           </div>
-          <div>
-            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
-            <select
-              value={audioOutputFormat}
-              onChange={(e) => setAudioOutputFormat(e.target.value as AudioOutputFormat)}
-              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
-            >
-              <option value="wav">wav</option>
-              <option value="mp3">mp3</option>
-            </select>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
+              <input
+                type="text"
+                value={audioVoice}
+                onChange={(e) => setAudioVoice(e.target.value)}
+                placeholder={audioApiFormat === 'dashscope_tts' ? '如：Cherry' : '如：alloy'}
+                className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
+              <select
+                value={audioOutputFormat}
+                onChange={(e) => setAudioOutputFormat(e.target.value as AudioOutputFormat)}
+                className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+              >
+                <option value="wav">wav</option>
+                <option value="mp3">mp3</option>
+              </select>
+            </div>
           </div>
         </div>
       )}

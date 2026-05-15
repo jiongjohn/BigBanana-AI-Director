@@ -4,7 +4,7 @@
  * 同时兼容自定义 endpoint 指向 /v1/audio/speech 的场景。
  */
 
-import { AudioOutputFormat } from '../../types/model';
+import { AudioApiFormat, AudioOutputFormat } from '../../types/model';
 import {
   retryOperation,
   checkApiKey,
@@ -13,6 +13,7 @@ import {
   resolveRequestModel,
   parseHttpError,
 } from './apiCore';
+import { callDashScopeSync } from '../adapters/dashscopeClient';
 
 export type DubbingMode = 'narration' | 'dialogue';
 
@@ -69,6 +70,58 @@ const extractTextFromMessageContent = (content: any): string => {
       .join('\n');
   }
   return '';
+};
+
+/**
+ * 从模型参数或 endpoint 中推断 API 协议。
+ * 显式配置的 apiFormat 优先；否则按 endpoint 路径关键词判断。
+ */
+const resolveAudioApiFormat = (
+  paramApiFormat: AudioApiFormat | undefined,
+  endpoint: string
+): AudioApiFormat => {
+  if (paramApiFormat) return paramApiFormat;
+  if (endpoint.includes('/services/aigc/multimodal-generation/generation')) {
+    return 'dashscope_tts';
+  }
+  if (endpoint.includes('/audio/speech')) return 'openai_speech';
+  return 'openai_chat';
+};
+
+/**
+ * 调用 DashScope qwen3-tts 系列模型。
+ * 请求体：{ model, input: { text, voice } }
+ * 响应：{ output: { audio: { data: base64 } } }
+ */
+const callDashScopeTts = async (
+  apiBase: string,
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  promptText: string,
+  voice: string,
+  format: AudioOutputFormat,
+  timeoutMs: number
+): Promise<string> => {
+  const payload = await callDashScopeSync<{ audio?: { data?: string } }>({
+    baseUrl: apiBase,
+    endpoint,
+    apiKey,
+    body: {
+      model,
+      input: {
+        text: promptText,
+        voice,
+      },
+    },
+    timeoutMs,
+  });
+
+  const audioBase64 = payload.output?.audio?.data;
+  if (!audioBase64) {
+    throw new Error('DashScope TTS 未返回音频数据');
+  }
+  return `data:${getMimeType(format)};base64,${audioBase64}`;
 };
 
 const callSpeechEndpoint = async (
@@ -162,7 +215,30 @@ export const generateDubbingAudio = async (
   const apiBase = getApiBase('audio', requestedModel);
   const promptText = buildPromptText(rawText, mode, language);
 
-  if (endpoint.includes('/audio/speech')) {
+  const apiFormat = resolveAudioApiFormat(params.apiFormat, endpoint);
+
+  if (apiFormat === 'dashscope_tts') {
+    const audioDataUrl = await callDashScopeTts(
+      apiBase,
+      endpoint,
+      apiKey,
+      usedModel,
+      // DashScope 不需要 OpenAI 那套"风格指令前缀"，直接朗读原文即可。
+      rawText,
+      usedVoice,
+      usedFormat,
+      timeoutMs
+    );
+    return {
+      audioDataUrl,
+      transcript: rawText,
+      usedModel,
+      usedVoice,
+      usedFormat,
+    };
+  }
+
+  if (apiFormat === 'openai_speech') {
     const audioDataUrl = await callSpeechEndpoint(
       apiBase,
       endpoint,

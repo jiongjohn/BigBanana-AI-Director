@@ -203,31 +203,43 @@ const ModelCard: React.FC<ModelCardProps> = ({
     </div>
   );
 
-  const renderAudioParams = (params: AudioModelParams) => (
-    <div className="grid grid-cols-2 gap-4">
-      <div>
-        <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
-        <input
-          type="text"
-          value={editParams.defaultVoice || params.defaultVoice}
-          onChange={(e) => handleParamChange('defaultVoice', e.target.value)}
-          className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
-          placeholder="alloy"
-        />
+  const renderAudioParams = (params: AudioModelParams) => {
+    const apiFormatLabel =
+      params.apiFormat === 'dashscope_tts'
+        ? 'DashScope TTS（阿里）'
+        : params.apiFormat === 'openai_speech'
+          ? 'OpenAI Speech（/v1/audio/speech）'
+          : 'OpenAI 多模态 Chat';
+    const voicePlaceholder = params.apiFormat === 'dashscope_tts' ? 'Cherry' : 'alloy';
+    return (
+      <div className="space-y-3">
+        <div className="text-[10px] text-[var(--text-muted)]">协议：{apiFormatLabel}</div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
+            <input
+              type="text"
+              value={editParams.defaultVoice || params.defaultVoice}
+              onChange={(e) => handleParamChange('defaultVoice', e.target.value)}
+              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+              placeholder={voicePlaceholder}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
+            <select
+              value={editParams.outputFormat || params.outputFormat}
+              onChange={(e) => handleParamChange('outputFormat', e.target.value)}
+              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+            >
+              <option value="wav">wav</option>
+              <option value="mp3">mp3</option>
+            </select>
+          </div>
+        </div>
       </div>
-      <div>
-        <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
-        <select
-          value={editParams.outputFormat || params.outputFormat}
-          onChange={(e) => handleParamChange('outputFormat', e.target.value)}
-          className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
-        >
-          <option value="wav">wav</option>
-          <option value="mp3">mp3</option>
-        </select>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const apiModelLabel = model.apiModel || model.id;
 

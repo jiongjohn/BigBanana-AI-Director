@@ -39,6 +39,14 @@ export type VideoMode = 'sync' | 'async';
  */
 export type AudioOutputFormat = 'wav' | 'mp3';
 
+/**
+ * 配音模型 API 协议
+ * openai_chat:    OpenAI Chat Completions + modalities/audio（默认）
+ * openai_speech:  OpenAI 经典 /v1/audio/speech 接口
+ * dashscope_tts:  阿里 DashScope 原生 TTS（qwen3-tts 系列）
+ */
+export type AudioApiFormat = 'openai_chat' | 'openai_speech' | 'dashscope_tts';
+
 // ============================================
 // 模型参数配置
 // ============================================
@@ -80,6 +88,7 @@ export interface VideoModelParams {
 export interface AudioModelParams {
   defaultVoice: string;                   // 默认音色
   outputFormat: AudioOutputFormat;        // 输出音频格式
+  apiFormat?: AudioApiFormat;             // API 协议（不填则按 endpoint 推断）
 }
 
 /**
@@ -318,11 +327,21 @@ export const DEFAULT_VIDEO_PARAMS_DOUBAO_SEEDANCE_2_0: VideoModelParams = {
 };
 
 /**
- * 默认配音模型参数
+ * 默认配音模型参数（OpenAI 多模态 chat 协议）
  */
 export const DEFAULT_AUDIO_PARAMS: AudioModelParams = {
   defaultVoice: 'alloy',
   outputFormat: 'wav',
+  apiFormat: 'openai_chat',
+};
+
+/**
+ * 默认配音模型参数（阿里 DashScope 原生 TTS）
+ */
+export const DEFAULT_AUDIO_PARAMS_DASHSCOPE: AudioModelParams = {
+  defaultVoice: 'Cherry',
+  outputFormat: 'mp3',
+  apiFormat: 'dashscope_tts',
 };
 
 // ============================================
