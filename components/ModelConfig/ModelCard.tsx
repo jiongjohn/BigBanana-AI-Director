@@ -5,14 +5,19 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Trash2, ToggleLeft, ToggleRight, CheckCircle, Circle } from 'lucide-react';
-import { 
-  ModelDefinition, 
+import {
+  ModelDefinition,
   ChatModelParams,
   ImageModelParams,
   VideoModelParams,
   AudioModelParams,
   AspectRatio,
-  VideoDuration
+  VideoDuration,
+  AudioApiFormat,
+  AudioOutputFormat,
+  DEFAULT_AUDIO_PARAMS,
+  DEFAULT_AUDIO_PARAMS_DASHSCOPE,
+  DEFAULT_AUDIO_PARAMS_MIMO,
 } from '../../types/model';
 import { getProviderById, getProviders } from '../../services/modelRegistry';
 
@@ -204,16 +209,92 @@ const ModelCard: React.FC<ModelCardProps> = ({
   );
 
   const renderAudioParams = (params: AudioModelParams) => {
+    const currentApiFormat: AudioApiFormat = editParams.apiFormat || params.apiFormat || 'openai_chat';
     const apiFormatLabel =
-      params.apiFormat === 'dashscope_tts'
+      currentApiFormat === 'dashscope_tts'
         ? 'DashScope TTS（阿里）'
-        : params.apiFormat === 'openai_speech'
+        : currentApiFormat === 'openai_speech'
           ? 'OpenAI Speech（/v1/audio/speech）'
-          : 'OpenAI 多模态 Chat';
-    const voicePlaceholder = params.apiFormat === 'dashscope_tts' ? 'Cherry' : 'alloy';
+          : currentApiFormat === 'mimo_tts'
+            ? 'MiMo TTS（小米）'
+            : 'OpenAI 多模态 Chat';
+    const voicePlaceholder =
+      currentApiFormat === 'dashscope_tts'
+        ? 'Cherry'
+        : currentApiFormat === 'mimo_tts'
+          ? 'Chloe'
+          : 'alloy';
+
+    const handleApiFormatSwitch = (next: AudioApiFormat) => {
+      if (next === currentApiFormat) return;
+      const defaults =
+        next === 'dashscope_tts'
+          ? DEFAULT_AUDIO_PARAMS_DASHSCOPE
+          : next === 'mimo_tts'
+            ? DEFAULT_AUDIO_PARAMS_MIMO
+            : DEFAULT_AUDIO_PARAMS;
+      const newParams: AudioModelParams = {
+        ...editParams,
+        apiFormat: next,
+        defaultVoice: defaults.defaultVoice,
+        outputFormat: defaults.outputFormat,
+      };
+      setEditParams(newParams);
+      const updates: Partial<ModelDefinition> = { params: newParams } as any;
+      if (!editEndpoint.trim()) {
+        const nextEndpoint =
+          next === 'dashscope_tts'
+            ? '/api/v1/services/aigc/multimodal-generation/generation'
+            : '/v1/chat/completions';
+        setEditEndpoint(nextEndpoint);
+        (updates as any).endpoint = nextEndpoint;
+      }
+      onUpdate(updates);
+    };
+
+    const FORMAT_BUTTONS: Array<{ key: AudioApiFormat; label: string }> = [
+      { key: 'openai_chat', label: 'OpenAI 多模态 Chat（gpt-audio）' },
+      { key: 'openai_speech', label: 'OpenAI Speech（/v1/audio/speech）' },
+      { key: 'dashscope_tts', label: '阿里 DashScope TTS（qwen3-tts）' },
+      { key: 'mimo_tts', label: '小米 MiMo TTS（mimo-v2.5-tts）' },
+    ];
+
     return (
       <div className="space-y-3">
-        <div className="text-[10px] text-[var(--text-muted)]">协议：{apiFormatLabel}</div>
+        {model.isBuiltIn ? (
+          <div className="text-[10px] text-[var(--text-muted)]">协议：{apiFormatLabel}</div>
+        ) : (
+          <div>
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 协议</label>
+            <div className="grid grid-cols-1 gap-2">
+              {FORMAT_BUTTONS.map((btn) => (
+                <button
+                  key={btn.key}
+                  onClick={() => handleApiFormatSwitch(btn.key)}
+                  className={`flex-1 py-2 text-xs rounded transition-colors ${
+                    currentApiFormat === btn.key
+                      ? 'bg-[var(--accent)] text-[var(--text-primary)]'
+                      : 'bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:bg-[var(--border-secondary)]'
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+            {currentApiFormat === 'dashscope_tts' && (
+              <p className="text-[9px] text-[var(--text-muted)] mt-1 leading-relaxed">
+                端点 <span className="font-mono">/api/v1/services/aigc/multimodal-generation/generation</span>，
+                需要勾选 useProxy。音色用阿里官方名（Cherry / Ethan / Chelsie 等）。
+              </p>
+            )}
+            {currentApiFormat === 'mimo_tts' && (
+              <p className="text-[9px] text-[var(--text-muted)] mt-1 leading-relaxed">
+                baseUrl 填 <span className="font-mono">https://api.xiaomimimo.com</span>，端点 <span className="font-mono">/v1/chat/completions</span>。
+                API 模型名填 <span className="font-mono">mimo-v2.5-tts</span> 等；切换协议会自动重置音色/格式为该协议默认值。
+              </p>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
@@ -229,7 +310,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
             <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
             <select
               value={editParams.outputFormat || params.outputFormat}
-              onChange={(e) => handleParamChange('outputFormat', e.target.value)}
+              onChange={(e) => handleParamChange('outputFormat', e.target.value as AudioOutputFormat)}
               className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
             >
               <option value="wav">wav</option>

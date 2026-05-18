@@ -23,6 +23,7 @@ import {
   DEFAULT_VIDEO_PARAMS_DOUBAO_SEEDANCE,
   DEFAULT_AUDIO_PARAMS,
   DEFAULT_AUDIO_PARAMS_DASHSCOPE,
+  DEFAULT_AUDIO_PARAMS_MIMO,
 } from '../../types/model';
 import { getProviders, addProvider } from '../../services/modelRegistry';
 import { useAlert } from '../GlobalAlert';
@@ -56,6 +57,12 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
       setAudioOutputFormat(DEFAULT_AUDIO_PARAMS_DASHSCOPE.outputFormat);
       if (!endpoint.trim()) {
         setEndpoint('/api/v1/services/aigc/multimodal-generation/generation');
+      }
+    } else if (next === 'mimo_tts') {
+      setAudioVoice(DEFAULT_AUDIO_PARAMS_MIMO.defaultVoice);
+      setAudioOutputFormat(DEFAULT_AUDIO_PARAMS_MIMO.outputFormat);
+      if (!endpoint.trim()) {
+        setEndpoint('/v1/chat/completions');
       }
     } else {
       setAudioVoice(DEFAULT_AUDIO_PARAMS.defaultVoice);
@@ -143,7 +150,9 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
       const audioDefaults =
         audioApiFormat === 'dashscope_tts'
           ? DEFAULT_AUDIO_PARAMS_DASHSCOPE
-          : DEFAULT_AUDIO_PARAMS;
+          : audioApiFormat === 'mimo_tts'
+            ? DEFAULT_AUDIO_PARAMS_MIMO
+            : DEFAULT_AUDIO_PARAMS;
       params = {
         ...audioDefaults,
         defaultVoice: audioVoice.trim() || audioDefaults.defaultVoice,
@@ -283,12 +292,30 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
               >
                 阿里 DashScope TTS（qwen3-tts 系列）
               </button>
+              <button
+                onClick={() => handleAudioApiFormatChange('mimo_tts')}
+                className={`flex-1 py-2 text-xs rounded transition-colors ${
+                  audioApiFormat === 'mimo_tts'
+                    ? 'bg-[var(--accent)] text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:bg-[var(--border-secondary)]'
+                }`}
+              >
+                小米 MiMo TTS（mimo-v2.5-tts 系列）
+              </button>
             </div>
             {audioApiFormat === 'dashscope_tts' && (
               <p className="text-[9px] text-[var(--text-muted)] mt-1 leading-relaxed">
                 提供商 baseUrl 推荐填 <span className="font-mono">https://dashscope.aliyuncs.com</span>，
                 端点 <span className="font-mono">/api/v1/services/aigc/multimodal-generation/generation</span>，
                 需要勾选 useProxy。音色用阿里官方名（Cherry / Ethan / Chelsie 等），不是 OpenAI 的 alloy。
+              </p>
+            )}
+            {audioApiFormat === 'mimo_tts' && (
+              <p className="text-[9px] text-[var(--text-muted)] mt-1 leading-relaxed">
+                提供商 baseUrl 填 <span className="font-mono">https://api.xiaomimimo.com</span>，
+                端点 <span className="font-mono">/v1/chat/completions</span>。
+                API 模型名填 <span className="font-mono">mimo-v2.5-tts</span> / <span className="font-mono">mimo-v2.5-tts-voicedesign</span> / <span className="font-mono">mimo-v2.5-tts-voiceclone</span>。
+                内置音色如 <span className="font-mono">Chloe</span>、<span className="font-mono">mimo_default</span>，朗读文本会放在 assistant 消息中，user 消息承载风格指令。
               </p>
             )}
           </div>
@@ -300,7 +327,13 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
                 type="text"
                 value={audioVoice}
                 onChange={(e) => setAudioVoice(e.target.value)}
-                placeholder={audioApiFormat === 'dashscope_tts' ? '如：Cherry' : '如：alloy'}
+                placeholder={
+                  audioApiFormat === 'dashscope_tts'
+                    ? '如：Cherry'
+                    : audioApiFormat === 'mimo_tts'
+                      ? '如：Chloe'
+                      : '如：alloy'
+                }
                 className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>

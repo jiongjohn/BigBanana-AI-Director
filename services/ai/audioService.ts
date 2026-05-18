@@ -52,13 +52,13 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
-const buildPromptText = (text: string, mode: DubbingMode, language: string): string => {
-  const styleInstruction =
-    mode === 'narration'
-      ? `请使用自然、克制的${language}旁白语气朗读以下内容，保持节奏稳定，不要添加额外文本。`
-      : `请使用有情绪但不过度夸张的${language}对白语气朗读以下内容，保持语义清晰，不要添加额外文本。`;
-  return `${styleInstruction}\n\n${text}`;
-};
+const buildStyleInstruction = (mode: DubbingMode, language: string): string =>
+  mode === 'narration'
+    ? `请使用自然、克制的${language}旁白语气朗读以下内容，保持节奏稳定，不要添加额外文本。`
+    : `请使用有情绪但不过度夸张的${language}对白语气朗读以下内容，保持语义清晰，不要添加额外文本。`;
+
+const buildPromptText = (text: string, mode: DubbingMode, language: string): string =>
+  `${buildStyleInstruction(mode, language)}\n\n${text}`;
 
 const extractTextFromMessageContent = (content: any): string => {
   if (!content) return '';
@@ -73,18 +73,25 @@ const extractTextFromMessageContent = (content: any): string => {
 };
 
 /**
- * 从模型参数或 endpoint 中推断 API 协议。
- * 显式配置的 apiFormat 优先；否则按 endpoint 路径关键词判断。
+ * 从模型参数、endpoint 或 model id 中推断 API 协议。
+ * 显式配置的 apiFormat 优先；否则按 endpoint 路径关键词、最后按模型名兜底判断。
  */
 const resolveAudioApiFormat = (
   paramApiFormat: AudioApiFormat | undefined,
-  endpoint: string
+  endpoint: string,
+  apiBase: string,
+  modelId: string
 ): AudioApiFormat => {
   if (paramApiFormat) return paramApiFormat;
   if (endpoint.includes('/services/aigc/multimodal-generation/generation')) {
     return 'dashscope_tts';
   }
   if (endpoint.includes('/audio/speech')) return 'openai_speech';
+  // MiMo 走 /v1/chat/completions，路径无法与 openai_chat 区分；按 host 与 model 名兜底
+  const host = `${apiBase} ${endpoint}`.toLowerCase();
+  if (host.includes('xiaomimimo.com') || /\bmimo[-_.]?v?\d.*tts\b/i.test(modelId)) {
+    return 'mimo_tts';
+  }
   return 'openai_chat';
 };
 
@@ -122,6 +129,75 @@ const callDashScopeTts = async (
     throw new Error('DashScope TTS 未返回音频数据');
   }
   return `data:${getMimeType(format)};base64,${audioBase64}`;
+};
+
+/**
+ * 调用小米 MiMo-V2.5-TTS 系列模型。
+ * 协议形如 OpenAI Chat Completions，但要朗读的文本必须放在 assistant.content，
+ * user.content 用来承载风格指令（可选，voicedesign 模型必填）。
+ * 响应：choices[0].message.audio.data（base64）。
+ */
+const callMimoTts = async (
+  apiBase: string,
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  rawText: string,
+  styleInstruction: string,
+  voice: string,
+  format: AudioOutputFormat,
+  timeoutMs: number
+): Promise<{ audioDataUrl: string; transcript: string }> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await retryOperation(async () => {
+      const res = await fetch(`${apiBase}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          audio: { voice, format },
+          messages: [
+            { role: 'user', content: styleInstruction },
+            { role: 'assistant', content: rawText },
+          ],
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw await parseHttpError(res);
+      }
+      return res;
+    });
+
+    const data = await response.json();
+    const message = data?.choices?.[0]?.message;
+    const audioPayload = message?.audio;
+    const audioBase64 = audioPayload?.data;
+    if (!audioBase64) {
+      throw new Error('MiMo TTS 未返回音频数据');
+    }
+    const transcript =
+      audioPayload?.transcript ||
+      extractTextFromMessageContent(message?.content) ||
+      rawText;
+    return {
+      audioDataUrl: `data:${getMimeType(format)};base64,${audioBase64}`,
+      transcript,
+    };
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`配音请求超时 (${Math.floor(timeoutMs / 1000)} 秒)`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 const callSpeechEndpoint = async (
@@ -215,7 +291,28 @@ export const generateDubbingAudio = async (
   const apiBase = getApiBase('audio', requestedModel);
   const promptText = buildPromptText(rawText, mode, language);
 
-  const apiFormat = resolveAudioApiFormat(params.apiFormat, endpoint);
+  const apiFormat = resolveAudioApiFormat(params.apiFormat, endpoint, apiBase, usedModel);
+
+  if (apiFormat === 'mimo_tts') {
+    const { audioDataUrl, transcript } = await callMimoTts(
+      apiBase,
+      endpoint,
+      apiKey,
+      usedModel,
+      rawText,
+      buildStyleInstruction(mode, language),
+      usedVoice,
+      usedFormat,
+      timeoutMs
+    );
+    return {
+      audioDataUrl,
+      transcript,
+      usedModel,
+      usedVoice,
+      usedFormat,
+    };
+  }
 
   if (apiFormat === 'dashscope_tts') {
     const audioDataUrl = await callDashScopeTts(

@@ -44,8 +44,9 @@ export type AudioOutputFormat = 'wav' | 'mp3';
  * openai_chat:    OpenAI Chat Completions + modalities/audio（默认）
  * openai_speech:  OpenAI 经典 /v1/audio/speech 接口
  * dashscope_tts:  阿里 DashScope 原生 TTS（qwen3-tts 系列）
+ * mimo_tts:       小米 MiMo-V2.5-TTS（Chat Completions 协议，但朗读文本必须放在 assistant.content）
  */
-export type AudioApiFormat = 'openai_chat' | 'openai_speech' | 'dashscope_tts';
+export type AudioApiFormat = 'openai_chat' | 'openai_speech' | 'dashscope_tts' | 'mimo_tts';
 
 // ============================================
 // 模型参数配置
@@ -342,6 +343,15 @@ export const DEFAULT_AUDIO_PARAMS_DASHSCOPE: AudioModelParams = {
   defaultVoice: 'Cherry',
   outputFormat: 'mp3',
   apiFormat: 'dashscope_tts',
+};
+
+/**
+ * 默认配音模型参数（小米 MiMo-V2.5-TTS）
+ */
+export const DEFAULT_AUDIO_PARAMS_MIMO: AudioModelParams = {
+  defaultVoice: 'Chloe',
+  outputFormat: 'wav',
+  apiFormat: 'mimo_tts',
 };
 
 // ============================================
