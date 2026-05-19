@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Users, Film, Trash2, Edit2, Check, X, Loader2, FolderOpen, ChevronRight, MapPin, Package, Database } from 'lucide-react';
+import { ChevronLeft, Plus, Users, Film, Trash2, Edit2, Check, X, Loader2, FolderOpen, ChevronRight, MapPin, Package, Database, Mic } from 'lucide-react';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { useAlert } from './GlobalAlert';
 import { exportSeriesProjectData } from '../services/storageService';
@@ -174,6 +174,13 @@ const ProjectOverview: React.FC = () => {
               >
                 <Package className="w-4 h-4" />
                 <span className="text-xs font-bold uppercase tracking-widest">道具库 ({project.propLibrary.length})</span>
+              </button>
+              <button
+                onClick={() => navigate(`/project/${project.id}/characters?tab=voice`)}
+                className="flex items-center gap-2 px-5 py-3 border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)] transition-colors"
+              >
+                <Mic className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest">音色库 ({(project.voiceLibrary || []).length})</span>
               </button>
               <button
                 onClick={handleExportData}

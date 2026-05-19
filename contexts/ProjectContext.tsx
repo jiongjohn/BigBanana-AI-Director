@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { SeriesProject, Series, Episode, Character, Scene, Prop, EpisodeCharacterRef, EpisodeSceneRef, EpisodePropRef, ProjectState } from '../types';
+import { SeriesProject, Series, Episode, Character, Scene, Prop, EpisodeCharacterRef, EpisodeSceneRef, EpisodePropRef, ProjectState, VoiceSample } from '../types';
 import {
   loadSeriesProject, saveSeriesProject,
   getSeriesByProject, saveSeries, createNewSeries, deleteSeries as deleteSeriesFromDB,
@@ -27,6 +27,12 @@ interface ProjectContextValue {
   addPropToLibrary: (prop: Prop) => void;
   updatePropInLibrary: (prop: Prop) => void;
   removePropFromLibrary: (propId: string) => void;
+
+  addVoiceToLibrary: (voice: VoiceSample) => void;
+  updateVoiceInLibrary: (voice: VoiceSample) => void;
+  removeVoiceFromLibrary: (voiceId: string) => void;
+
+  bulkPersistEpisodes: (eps: Episode[]) => Promise<void>;
 
   createSeries: (title: string) => Promise<Series>;
   updateSeries: (id: string, updates: Partial<Series>) => Promise<void>;
@@ -304,6 +310,30 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateProjectLibrary]);
 
+  const addVoiceToLibrary = useCallback((voice: VoiceSample) => {
+    updateProjectLibrary(prev => ({
+      ...prev,
+      voiceLibrary: [...(prev.voiceLibrary || []), voice],
+      lastModified: Date.now(),
+    }));
+  }, [updateProjectLibrary]);
+
+  const updateVoiceInLibrary = useCallback((voice: VoiceSample) => {
+    updateProjectLibrary(prev => ({
+      ...prev,
+      voiceLibrary: (prev.voiceLibrary || []).map(v => (v.id === voice.id ? voice : v)),
+      lastModified: Date.now(),
+    }));
+  }, [updateProjectLibrary]);
+
+  const removeVoiceFromLibrary = useCallback((voiceId: string) => {
+    updateProjectLibrary(prev => ({
+      ...prev,
+      voiceLibrary: (prev.voiceLibrary || []).filter(v => v.id !== voiceId),
+      lastModified: Date.now(),
+    }));
+  }, [updateProjectLibrary]);
+
   const handleCreateSeries = useCallback(async (title: string): Promise<Series> => {
     if (!project) throw new Error('No project loaded');
     const s = createNewSeries(project.id, title, allSeries.length);
@@ -333,6 +363,16 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
   }, []);
+
+  const bulkPersistEpisodes = useCallback(async (eps: Episode[]) => {
+    if (eps.length === 0) return;
+    const map = new Map(eps.map(e => [e.id, { ...e, lastModified: Date.now() }]));
+    setAllEpisodes(prev => prev.map(e => map.get(e.id) || e));
+    if (currentEpisode && map.has(currentEpisode.id)) {
+      setCurrentEpisode(map.get(currentEpisode.id) || currentEpisode);
+    }
+    await Promise.all(Array.from(map.values()).map(e => saveEpisode(e)));
+  }, [currentEpisode]);
 
   const handleCreateEpisode = useCallback(async (seriesId: string, title: string): Promise<Episode> => {
     if (!project) throw new Error('No project loaded');
@@ -452,6 +492,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     addCharacterToLibrary, updateCharacterInLibrary, removeCharacterFromLibrary,
     addSceneToLibrary, updateSceneInLibrary, removeSceneFromLibrary,
     addPropToLibrary, updatePropInLibrary, removePropFromLibrary,
+    addVoiceToLibrary, updateVoiceInLibrary, removeVoiceFromLibrary,
+    bulkPersistEpisodes,
     createSeries: handleCreateSeries, updateSeries: handleUpdateSeries, removeSeries: handleRemoveSeries,
     setCurrentEpisode, updateEpisode,
     createEpisode: handleCreateEpisode, removeEpisode: handleRemoveEpisode,

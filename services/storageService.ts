@@ -212,6 +212,7 @@ export const createNewSeriesProject = (title?: string): SeriesProject => {
     characterLibrary: [],
     sceneLibrary: [],
     propLibrary: [],
+    voiceLibrary: [],
   };
 };
 

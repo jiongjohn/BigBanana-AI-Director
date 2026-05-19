@@ -1,4 +1,4 @@
-import { AssetLibraryItem, Character, ProjectState, Prop, Scene, SeriesProject, Episode, EpisodeCharacterRef } from '../types';
+import { AssetLibraryItem, Character, ProjectState, Prop, Scene, SeriesProject, Episode, EpisodeCharacterRef, VoiceSample } from '../types';
 
 const generateId = (prefix: string): string => {
   const rand = Math.random().toString(36).slice(2, 6);
@@ -90,7 +90,35 @@ export const clonePropForProject = (prop: Prop): Prop => {
   };
 };
 
+export const createLibraryItemFromVoice = (
+  voice: VoiceSample,
+  project?: Pick<ProjectState, 'id' | 'title'>
+): AssetLibraryItem => {
+  const now = Date.now();
+  return {
+    id: generateId('asset'),
+    type: 'voice',
+    name: voice.name,
+    projectId: project?.id,
+    projectName: project?.title,
+    createdAt: now,
+    updatedAt: now,
+    data: { ...voice }
+  };
+};
+
+export const cloneVoiceForProject = (voice: VoiceSample): VoiceSample => {
+  return {
+    ...voice,
+    id: generateId('voice'),
+  };
+};
+
 export const applyLibraryItemToProject = (project: ProjectState, item: AssetLibraryItem): ProjectState => {
+  if (item.type === 'voice') {
+    throw new Error('音色样本仅保留在资产库中，无需导入到项目脚本数据。');
+  }
+
   if (!project.scriptData) {
     throw new Error('项目尚未生成角色和场景，无法导入资产。');
   }

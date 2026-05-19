@@ -131,6 +131,22 @@ const callDashScopeTts = async (
   return `data:${getMimeType(format)};base64,${audioBase64}`;
 };
 
+// MiMo VoiceClone 单样本上限 10MB（解码后的原始字节，base64 编码后会膨胀 ~33%）
+const MIMO_VOICE_SAMPLE_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * 估算 `data:...;base64,XXX` data URL 中原始音频的字节数；非 data URL 返回 0。
+ * 公式：rawBytes ≈ base64Len * 3 / 4 - padding('=')
+ */
+const estimateDataUrlBytes = (value: string): number => {
+  if (!value.startsWith('data:')) return 0;
+  const commaIdx = value.indexOf(',');
+  if (commaIdx < 0) return 0;
+  const b64 = value.slice(commaIdx + 1);
+  const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.floor((b64.length * 3) / 4) - padding;
+};
+
 /**
  * 调用小米 MiMo-V2.5-TTS 系列模型。
  * 协议形如 OpenAI Chat Completions，但要朗读的文本必须放在 assistant.content，
@@ -148,6 +164,15 @@ const callMimoTts = async (
   format: AudioOutputFormat,
   timeoutMs: number
 ): Promise<{ audioDataUrl: string; transcript: string }> => {
+  // VoiceClone 场景：voice 是音频样本的 data URL，提前卡 10MB 防御
+  if (voice.startsWith('data:')) {
+    const rawBytes = estimateDataUrlBytes(voice);
+    if (rawBytes > MIMO_VOICE_SAMPLE_MAX_BYTES) {
+      throw new Error(
+        `音色样本大小约 ${(rawBytes / 1024 / 1024).toFixed(1)}MB 超过 MiMo 10MB 上限，请压缩或裁剪后重试`
+      );
+    }
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 

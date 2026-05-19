@@ -73,7 +73,7 @@ interface ShotWorkbenchProps {
   useAIEnhancement: boolean;
   onToggleAIEnhancement: () => void;
   onGenerateVideo: (aspectRatio: AspectRatio, duration: VideoDuration, modelId: string) => void;
-  onGenerateDubbing: (mode: DubbingMode, text: string, modelId?: string) => void;
+  onGenerateDubbing: (mode: DubbingMode, text: string, modelId?: string, voiceSampleId?: string) => void;
   onClearDubbing: () => void;
   onEditVideoPrompt: () => void;
   onVideoModelChange: (modelId: string) => void;

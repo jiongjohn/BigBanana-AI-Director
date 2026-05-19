@@ -781,7 +781,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     shot: Shot,
     mode: DubbingMode,
     text: string,
-    modelId?: string
+    modelId?: string,
+    voiceSampleId?: string
   ) => {
     const cleanText = (text || '').trim();
     if (!cleanText) {
@@ -791,12 +792,23 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
 
     const selectedModelId = modelId || shot.dubbing?.modelId || getActiveAudioModel()?.id || 'gpt-audio-1.5';
 
+    let voiceOverride: string | undefined;
+    if (voiceSampleId) {
+      const sample = (project.voiceLibrary || []).find((v) => v.id === voiceSampleId);
+      if (!sample) {
+        showAlert('选定的音色样本不存在，请重新选择', { type: 'error' });
+        return;
+      }
+      voiceOverride = sample.audioDataUrl;
+    }
+
     updateShot(shot.id, (s) => ({
       ...s,
       dubbing: {
         mode,
         text: cleanText,
         modelId: selectedModelId,
+        voiceSampleId: voiceSampleId || undefined,
         status: 'generating',
       },
     }));
@@ -806,6 +818,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
         text: cleanText,
         mode,
         model: selectedModelId,
+        voice: voiceOverride,
         language: project.language || project.scriptData?.language || '中文',
       });
 
@@ -815,6 +828,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
           mode,
           text: cleanText,
           modelId: selectedModelId,
+          voiceSampleId: voiceSampleId || undefined,
           voice: result.usedVoice,
           outputFormat: result.usedFormat,
           transcript: result.transcript,
@@ -1869,7 +1883,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
             useAIEnhancement={useAIEnhancement}
             onToggleAIEnhancement={() => setUseAIEnhancement(!useAIEnhancement)}
             onGenerateVideo={(aspectRatio, duration, modelId) => handleGenerateVideo(activeShot, aspectRatio, duration, modelId)}
-            onGenerateDubbing={(mode, text, modelId) => handleGenerateDubbing(activeShot, mode, text, modelId)}
+            onGenerateDubbing={(mode, text, modelId, voiceSampleId) => handleGenerateDubbing(activeShot, mode, text, modelId, voiceSampleId)}
             onClearDubbing={() =>
               updateShot(activeShot.id, (s) => ({
                 ...s,

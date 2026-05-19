@@ -192,7 +192,26 @@ export interface Prop {
   version?: number;
 }
 
-export type AssetLibraryItemType = 'character' | 'scene' | 'prop';
+export type AssetLibraryItemType = 'character' | 'scene' | 'prop' | 'voice';
+
+/**
+ * 音色样本资产
+ * 音频以 base64 data URL 直接内联，与 Character.referenceImage 同款存储策略。
+ * 用于 MiMo-V2.5-TTS-VoiceClone 等支持样本克隆的 TTS 协议；
+ * compatibleProtocols 用来在 DubbingPanel 中过滤当前模型是否能用此样本。
+ */
+export interface VoiceSample {
+  id: string;
+  name: string;
+  // 形如 data:audio/wav;base64,xxx 或 data:audio/mpeg;base64,xxx
+  audioDataUrl: string;
+  mimeType: 'audio/wav' | 'audio/mpeg' | 'audio/mp3';
+  sizeBytes: number;          // 用于校验是否超过厂商上限（MiMo 10MB）
+  durationSec?: number;       // 客户端解码得到，用于 UI 展示
+  language?: string;          // 如 '中文' / 'English'
+  transcript?: string;        // 样本中的台词文本，帮助辨识
+  compatibleProtocols?: import('./types/model').AudioApiFormat[]; // 默认 ['mimo_tts']
+}
 
 export interface AssetLibraryItem {
   id: string;
@@ -202,7 +221,7 @@ export interface AssetLibraryItem {
   projectName?: string;
   createdAt: number;
   updatedAt: number;
-  data: Character | Scene | Prop;
+  data: Character | Scene | Prop | VoiceSample;
 }
 
 export interface Keyframe {
@@ -274,6 +293,7 @@ export interface ShotDubbing {
   text: string;
   modelId: string;
   voice?: string;
+  voiceSampleId?: string;     // 引用 SeriesProject.voiceLibrary 中的样本（声音克隆类模型用）
   outputFormat?: DubbingOutputFormat;
   audioUrl?: string; // base64 data url
   transcript?: string;
@@ -387,6 +407,7 @@ export interface SeriesProject {
   characterLibrary: Character[];
   sceneLibrary: Scene[];
   propLibrary: Prop[];
+  voiceLibrary?: VoiceSample[];
 }
 
 export interface Series {

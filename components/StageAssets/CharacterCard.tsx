@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Check, Shirt, Trash2, Edit2, AlertCircle, FolderPlus, Grid3x3, Link2, Upload, X } from 'lucide-react';
+import { User, Check, Shirt, Trash2, Edit2, AlertCircle, FolderPlus, Grid3x3, Link2, Upload, X, BookmarkPlus } from 'lucide-react';
 import { Character } from '../../types';
 import PromptEditor from './PromptEditor';
 import ImageUploadButton from './ImageUploadButton';
@@ -20,6 +20,7 @@ interface CharacterCardProps {
   onDelete: () => void;
   onUpdateInfo: (updates: { name?: string; gender?: string; age?: string; personality?: string }) => void;
   onAddToLibrary: () => void;
+  onSaveToProjectLibrary: () => void;
   onReplaceFromLibrary: () => void;
 }
 
@@ -38,6 +39,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   onDelete,
   onUpdateInfo,
   onAddToLibrary,
+  onSaveToProjectLibrary,
   onReplaceFromLibrary,
 }) => {
   const isLinked = !!character.libraryId;
@@ -262,6 +264,18 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             </button>
           )}
         </div>
+
+        {!isLinked && (
+          <button
+            onClick={onSaveToProjectLibrary}
+            disabled={isGenerating}
+            className="w-full py-2 mt-2 bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            title="将该角色保存到项目库，方便其他剧集复用并保持同步"
+          >
+            <BookmarkPlus className="w-3 h-3" />
+            保存到项目库
+          </button>
+        )}
 
         <button
           onClick={onAddToLibrary}

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Sparkles, RefreshCw, Loader2, MapPin, Archive, X, Search, Trash2, Package, Link2 } from 'lucide-react';
-import { ProjectState, CharacterVariation, Character, Scene, Prop, AspectRatio, AssetLibraryItem, CharacterTurnaroundPanel } from '../../types';
+import { Users, Sparkles, RefreshCw, Loader2, MapPin, Archive, X, Search, Trash2, Package, Link2, Mic } from 'lucide-react';
+import { ProjectState, CharacterVariation, Character, Scene, Prop, AspectRatio, AssetLibraryItem, CharacterTurnaroundPanel, VoiceSample } from '../../types';
+import { useProjectContext } from '../../contexts/ProjectContext';
+import { cloneVoiceForProject } from '../../services/assetLibraryService';
 import { generateImage, generateVisualPrompts, generateCharacterTurnaroundPanels, generateCharacterTurnaroundImage } from '../../services/aiService';
 import { 
   getRegionalPrefix, 
@@ -38,6 +40,7 @@ interface Props {
 
 const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, onGeneratingChange }) => {
   const { showAlert } = useAlert();
+  const { addVoiceToLibrary, addCharacterToLibrary, addSceneToLibrary, addPropToLibrary } = useProjectContext();
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -45,7 +48,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   const [libraryItems, setLibraryItems] = useState<AssetLibraryItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState('');
-  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop'>('all');
+  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop' | 'voice'>('all');
   const [libraryProjectFilter, setLibraryProjectFilter] = useState('all');
   const [replaceTargetCharId, setReplaceTargetCharId] = useState<string | null>(null);
   const [turnaroundCharId, setTurnaroundCharId] = useState<string | null>(null);
@@ -612,6 +615,100 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
     });
   };
 
+  // 把当前剧集的角色/场景/道具回写到项目库，并把当前实例 link 到新创建的库条目
+  const makeLibId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+  const handleSaveCharacterToProjectLibrary = (char: Character) => {
+    if (char.libraryId) {
+      showAlert('该角色已链接到项目库', { type: 'info' });
+      return;
+    }
+    const libId = makeLibId('char');
+    const libCopy: Character = {
+      ...char,
+      id: libId,
+      libraryId: undefined,
+      libraryVersion: undefined,
+      version: 1,
+      variations: (char.variations || []).map(v => ({ ...v })),
+    };
+    addCharacterToLibrary(libCopy);
+    updateProject(prev => {
+      if (!prev.scriptData) return prev;
+      const newCharacters = prev.scriptData.characters.map(c =>
+        c.id === char.id ? { ...c, libraryId: libId, libraryVersion: 1 } : c
+      );
+      const refs = (prev.characterRefs || []).filter(r => r.characterId !== libId);
+      refs.push({ characterId: libId, syncedVersion: 1, syncStatus: 'synced' });
+      return {
+        ...prev,
+        scriptData: { ...prev.scriptData, characters: newCharacters },
+        characterRefs: refs,
+      };
+    });
+    showAlert(`已保存到项目库：${char.name}`, { type: 'success' });
+  };
+
+  const handleSaveSceneToProjectLibrary = (scene: Scene) => {
+    if (scene.libraryId) {
+      showAlert('该场景已链接到项目库', { type: 'info' });
+      return;
+    }
+    const libId = makeLibId('scene');
+    const libCopy: Scene = {
+      ...scene,
+      id: libId,
+      libraryId: undefined,
+      libraryVersion: undefined,
+      version: 1,
+    };
+    addSceneToLibrary(libCopy);
+    updateProject(prev => {
+      if (!prev.scriptData) return prev;
+      const newScenes = prev.scriptData.scenes.map(s =>
+        s.id === scene.id ? { ...s, libraryId: libId, libraryVersion: 1 } : s
+      );
+      const refs = (prev.sceneRefs || []).filter(r => r.sceneId !== libId);
+      refs.push({ sceneId: libId, syncedVersion: 1, syncStatus: 'synced' });
+      return {
+        ...prev,
+        scriptData: { ...prev.scriptData, scenes: newScenes },
+        sceneRefs: refs,
+      };
+    });
+    showAlert(`已保存到项目库：${scene.location}`, { type: 'success' });
+  };
+
+  const handleSavePropToProjectLibrary = (prop: Prop) => {
+    if (prop.libraryId) {
+      showAlert('该道具已链接到项目库', { type: 'info' });
+      return;
+    }
+    const libId = makeLibId('prop');
+    const libCopy: Prop = {
+      ...prop,
+      id: libId,
+      libraryId: undefined,
+      libraryVersion: undefined,
+      version: 1,
+    };
+    addPropToLibrary(libCopy);
+    updateProject(prev => {
+      if (!prev.scriptData) return prev;
+      const newProps = (prev.scriptData.props || []).map(p =>
+        p.id === prop.id ? { ...p, libraryId: libId, libraryVersion: 1 } : p
+      );
+      const refs = (prev.propRefs || []).filter(r => r.propId !== libId);
+      refs.push({ propId: libId, syncedVersion: 1, syncStatus: 'synced' });
+      return {
+        ...prev,
+        scriptData: { ...prev.scriptData, props: newProps },
+        propRefs: refs,
+      };
+    });
+    showAlert(`已保存到项目库：${prop.name}`, { type: 'success' });
+  };
+
   const handleAddCharacterToLibrary = (char: Character) => {
     const saveItem = async () => {
       try {
@@ -661,6 +758,16 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
   };
 
   const handleImportFromLibrary = (item: AssetLibraryItem) => {
+    if (item.type === 'voice') {
+      try {
+        const cloned = cloneVoiceForProject(item.data as VoiceSample);
+        addVoiceToLibrary(cloned);
+        showAlert(`已添加到本项目音色库：${item.name}`, { type: 'success' });
+      } catch (e: any) {
+        showAlert(e?.message || '添加音色样本失败', { type: 'error' });
+      }
+      return;
+    }
     try {
       const updated = applyLibraryItemToProject(project, item);
       updateProject(() => ({
@@ -1655,7 +1762,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                   </select>
                 </div>
                 <div className="flex gap-2">
-                  {(['all', 'character', 'scene', 'prop'] as const).map((type) => (
+                  {(['all', 'character', 'scene', 'prop', 'voice'] as const).map((type) => (
                     <button
                       key={type}
                       onClick={() => setLibraryFilter(type)}
@@ -1665,7 +1772,15 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                           : 'bg-transparent text-[var(--text-tertiary)] border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)]'
                       }`}
                     >
-                      {type === 'all' ? '全部' : type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具'}
+                      {type === 'all'
+                        ? '全部'
+                        : type === 'character'
+                          ? '角色'
+                          : type === 'scene'
+                            ? '场景'
+                            : type === 'prop'
+                              ? '道具'
+                              : '音色'}
                     </button>
                   ))}
                 </div>
@@ -1682,37 +1797,61 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredLibraryItems.map((item) => {
-                    const preview =
-                      item.type === 'character'
+                    const isVoiceItem = item.type === 'voice';
+                    const voice = isVoiceItem ? (item.data as VoiceSample) : null;
+                    const preview = isVoiceItem
+                      ? null
+                      : item.type === 'character'
                         ? (item.data as Character).referenceImage
                         : item.type === 'scene'
-                        ? (item.data as Scene).referenceImage
-                        : (item.data as Prop).referenceImage;
+                          ? (item.data as Scene).referenceImage
+                          : (item.data as Prop).referenceImage;
+                    const typeLabel =
+                      item.type === 'character'
+                        ? '角色'
+                        : item.type === 'scene'
+                          ? '场景'
+                          : item.type === 'prop'
+                            ? '道具'
+                            : '音色';
                     return (
                       <div
                         key={item.id}
                         className="bg-[var(--bg-deep)] border border-[var(--border-primary)] rounded-xl overflow-hidden hover:border-[var(--border-secondary)] transition-colors"
                       >
-                        <div className="aspect-video bg-[var(--bg-elevated)] relative">
-                          {preview ? (
-                            <img src={preview} alt={item.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
-                              {item.type === 'character' ? (
-                                <Users className="w-8 h-8 opacity-30" />
-                              ) : item.type === 'scene' ? (
-                                <MapPin className="w-8 h-8 opacity-30" />
-                              ) : (
-                                <Package className="w-8 h-8 opacity-30" />
-                              )}
+                        {voice ? (
+                          <div className="p-3 bg-[var(--bg-elevated)] space-y-2">
+                            <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+                              <Mic className="w-4 h-4 text-[var(--accent-text)]" />
+                              <span className="text-[10px] font-mono uppercase tracking-widest">{voice.mimeType.replace('audio/', '')}</span>
+                              {voice.durationSec ? (
+                                <span className="text-[10px] font-mono ml-auto">{voice.durationSec.toFixed(1)}s</span>
+                              ) : null}
                             </div>
-                          )}
-                        </div>
+                            <audio src={voice.audioDataUrl} controls preload="metadata" className="w-full" />
+                          </div>
+                        ) : (
+                          <div className="aspect-video bg-[var(--bg-elevated)] relative">
+                            {preview ? (
+                              <img src={preview} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
+                                {item.type === 'character' ? (
+                                  <Users className="w-8 h-8 opacity-30" />
+                                ) : item.type === 'scene' ? (
+                                  <MapPin className="w-8 h-8 opacity-30" />
+                                ) : (
+                                  <Package className="w-8 h-8 opacity-30" />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="p-4 space-y-3">
                           <div>
                             <div className="text-sm text-[var(--text-primary)] font-bold line-clamp-1">{item.name}</div>
                             <div className="text-[10px] text-[var(--text-tertiary)] font-mono uppercase tracking-widest mt-1">
-                              {item.type === 'character' ? '角色' : item.type === 'scene' ? '场景' : '道具'}
+                              {typeLabel}
                             </div>
                             <div className="text-[10px] text-[var(--text-muted)] font-mono mt-1 line-clamp-1">
                               {(item.projectName && item.projectName.trim()) || '未知项目'}
@@ -1721,13 +1860,18 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() =>
-                                replaceTargetCharId
+                                replaceTargetCharId && !isVoiceItem
                                   ? handleReplaceCharacterFromLibrary(item, replaceTargetCharId)
                                   : handleImportFromLibrary(item)
                               }
-                              className="flex-1 py-2 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] rounded text-[10px] font-bold uppercase tracking-wider transition-colors"
+                              disabled={replaceTargetCharId !== null && isVoiceItem}
+                              className="flex-1 py-2 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:bg-[var(--btn-primary-hover)] rounded text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                              {replaceTargetCharId ? '替换当前角色' : '导入到当前项目'}
+                              {isVoiceItem
+                                ? '添加到本项目音色库'
+                                : replaceTargetCharId
+                                  ? '替换当前角色'
+                                  : '导入到当前项目'}
                             </button>
                             <button
                               onClick={() =>
@@ -1874,6 +2018,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                 onDelete={() => handleDeleteCharacter(char.id)}
                 onUpdateInfo={(updates) => handleUpdateCharacterInfo(char.id, updates)}
                 onAddToLibrary={() => handleAddCharacterToLibrary(char)}
+                onSaveToProjectLibrary={() => handleSaveCharacterToProjectLibrary(char)}
                 onReplaceFromLibrary={() => openLibrary('character', char.id)}
               />
             ))}
@@ -1944,6 +2089,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                 onDelete={() => handleDeleteScene(scene.id)}
                 onUpdateInfo={(updates) => handleUpdateSceneInfo(scene.id, updates)}
                 onAddToLibrary={() => handleAddSceneToLibrary(scene)}
+                onSaveToProjectLibrary={() => handleSaveSceneToProjectLibrary(scene)}
               />
             ))}
           </div>
@@ -2020,6 +2166,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject, onApiKeyError, o
                   onDelete={() => handleDeleteProp(prop.id)}
                   onUpdateInfo={(updates) => handleUpdatePropInfo(prop.id, updates)}
                   onAddToLibrary={() => handleAddPropToLibrary(prop)}
+                  onSaveToProjectLibrary={() => handleSavePropToProjectLibrary(prop)}
                 />
               ))}
             </div>

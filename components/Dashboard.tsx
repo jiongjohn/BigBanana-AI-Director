@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Package, Database, Settings, Sun, Moon, Film, ExternalLink, User } from 'lucide-react';
-import { SeriesProject, AssetLibraryItem, Character, Scene, Prop, ProjectState } from '../types';
+import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X, HelpCircle, Cpu, Archive, Search, Users, MapPin, Package, Database, Settings, Sun, Moon, Film, ExternalLink, User, Mic } from 'lucide-react';
+import { SeriesProject, AssetLibraryItem, Character, Scene, Prop, ProjectState, VoiceSample } from '../types';
 import { getAllSeriesProjects, createNewSeriesProject, saveSeriesProject, deleteSeriesProject, createNewSeries, saveSeries, createNewEpisode, saveEpisode, getAllAssetLibraryItems, deleteAssetFromLibrary, exportIndexedDBData } from '../services/storageService';
 import { useAlert } from './GlobalAlert';
 import { useTheme } from '../contexts/ThemeContext';
@@ -31,7 +31,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
   const [libraryItems, setLibraryItems] = useState<AssetLibraryItem[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(true);
   const [libraryQuery, setLibraryQuery] = useState('');
-  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop'>('all');
+  const [libraryFilter, setLibraryFilter] = useState<'all' | 'character' | 'scene' | 'prop' | 'voice'>('all');
   const [libraryProjectFilter, setLibraryProjectFilter] = useState('all');
   const [assetToUse, setAssetToUse] = useState<AssetLibraryItem | null>(null);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
@@ -505,7 +505,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                 </select>
               </div>
               <div className="flex gap-2">
-                {(['all', 'character', 'scene', 'prop'] as const).map((type) => (
+                {(['all', 'character', 'scene', 'prop', 'voice'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setLibraryFilter(type)}
@@ -515,7 +515,15 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
                         : 'bg-transparent text-[var(--text-tertiary)] border-[var(--border-primary)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)]'
                     }`}
                   >
-                    {type === 'all' ? '全部' : type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具'}
+                    {type === 'all'
+                      ? '全部'
+                      : type === 'character'
+                        ? '角色'
+                        : type === 'scene'
+                          ? '场景'
+                          : type === 'prop'
+                            ? '道具'
+                            : '音色'}
                   </button>
                 ))}
               </div>
@@ -532,37 +540,61 @@ const Dashboard: React.FC<Props> = ({ onOpenProject, onShowOnboarding, onShowMod
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredLibraryItems.map((item) => {
-                  const preview =
-                    item.type === 'character'
+                  const isVoiceItem = item.type === 'voice';
+                  const voice = isVoiceItem ? (item.data as VoiceSample) : null;
+                  const preview = isVoiceItem
+                    ? null
+                    : item.type === 'character'
                       ? (item.data as Character).referenceImage
                       : item.type === 'scene'
-                      ? (item.data as Scene).referenceImage
-                      : (item.data as Prop).referenceImage;
+                        ? (item.data as Scene).referenceImage
+                        : (item.data as Prop).referenceImage;
+                  const typeLabel =
+                    item.type === 'character'
+                      ? '角色'
+                      : item.type === 'scene'
+                        ? '场景'
+                        : item.type === 'prop'
+                          ? '道具'
+                          : '音色';
                   return (
                     <div
                       key={item.id}
                       className="bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-secondary)] transition-colors rounded-xl overflow-hidden"
                     >
-                      <div className="aspect-video bg-[var(--bg-elevated)]">
-                        {preview ? (
-                          <img src={preview} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
-                            {item.type === 'character' ? (
-                              <Users className="w-8 h-8 opacity-30" />
-                            ) : item.type === 'scene' ? (
-                              <MapPin className="w-8 h-8 opacity-30" />
-                            ) : (
-                              <Package className="w-8 h-8 opacity-30" />
-                            )}
+                      {voice ? (
+                        <div className="p-3 bg-[var(--bg-elevated)] space-y-2">
+                          <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+                            <Mic className="w-4 h-4 text-[var(--accent-text)]" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest">{voice.mimeType.replace('audio/', '')}</span>
+                            {voice.durationSec ? (
+                              <span className="text-[10px] font-mono ml-auto">{voice.durationSec.toFixed(1)}s</span>
+                            ) : null}
                           </div>
-                        )}
-                      </div>
+                          <audio src={voice.audioDataUrl} controls preload="metadata" className="w-full" />
+                        </div>
+                      ) : (
+                        <div className="aspect-video bg-[var(--bg-elevated)]">
+                          {preview ? (
+                            <img src={preview} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">
+                              {item.type === 'character' ? (
+                                <Users className="w-8 h-8 opacity-30" />
+                              ) : item.type === 'scene' ? (
+                                <MapPin className="w-8 h-8 opacity-30" />
+                              ) : (
+                                <Package className="w-8 h-8 opacity-30" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="p-4 space-y-3">
                         <div>
                           <div className="text-sm text-[var(--text-primary)] font-bold line-clamp-1">{item.name}</div>
                           <div className="text-[10px] text-[var(--text-tertiary)] font-mono uppercase tracking-widest mt-1">
-                            {item.type === 'character' ? '角色' : item.type === 'scene' ? '场景' : '道具'}
+                            {typeLabel}
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)] font-mono mt-1 line-clamp-1">
                             {(item.projectName && item.projectName.trim()) || '未知项目'}

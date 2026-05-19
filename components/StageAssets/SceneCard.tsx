@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Check, Loader2, Trash2, Edit2, AlertCircle, FolderPlus, Upload, X } from 'lucide-react';
+import { MapPin, Check, Loader2, Trash2, Edit2, AlertCircle, FolderPlus, Upload, X, BookmarkPlus, Link2 } from 'lucide-react';
 import PromptEditor from './PromptEditor';
 import ImageUploadButton from './ImageUploadButton';
 import InlineEditableText from './InlineEditableText';
@@ -13,6 +13,7 @@ interface SceneCardProps {
     visualPrompt?: string;
     referenceImage?: string;
     status?: 'pending' | 'generating' | 'completed' | 'failed';
+    libraryId?: string;
   };
   isGenerating: boolean;
   shapeReferenceImage?: string;
@@ -25,6 +26,7 @@ interface SceneCardProps {
   onDelete: () => void;
   onUpdateInfo: (updates: { location?: string; time?: string; atmosphere?: string }) => void;
   onAddToLibrary: () => void;
+  onSaveToProjectLibrary: () => void;
 }
 
 const SceneCard: React.FC<SceneCardProps> = ({
@@ -40,7 +42,9 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onDelete,
   onUpdateInfo,
   onAddToLibrary,
+  onSaveToProjectLibrary,
 }) => {
+  const isLinked = !!scene.libraryId;
   const handleShapeReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -209,6 +213,27 @@ const SceneCard: React.FC<SceneCardProps> = ({
             </button>
           )}
         </div>
+
+        {isLinked && (
+          <div className="mt-3 px-3 py-1.5 bg-[var(--accent-bg)] border border-[var(--accent-border)] rounded flex items-center gap-1.5">
+            <Link2 className="w-3 h-3 text-[var(--accent-text)]" />
+            <span className="text-[9px] font-mono text-[var(--accent-text)] uppercase tracking-widest">项目场景</span>
+          </div>
+        )}
+
+        {!isLinked && (
+          <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+            <button
+              onClick={onSaveToProjectLibrary}
+              disabled={isGenerating}
+              className="w-full py-2 bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-primary)] rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              title="将该场景保存到项目库，方便其他剧集复用并保持同步"
+            >
+              <BookmarkPlus className="w-3 h-3" />
+              保存到项目库
+            </button>
+          </div>
+        )}
 
         <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
           <button
